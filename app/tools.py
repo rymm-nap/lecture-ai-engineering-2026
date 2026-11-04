@@ -6,10 +6,13 @@
 
 import json
 import random
+from datetime import datetime, timezone
 from functools import cache
 from pathlib import Path
+from uuid import uuid4
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+LEARNING_LOG_DIR = Path(__file__).resolve().parent.parent / "learning_log"
 MAX_RESULTS = 3
 
 
@@ -97,3 +100,20 @@ def make_quiz(lecture: int) -> str:
         },
         ensure_ascii=False,
     )
+
+
+def save_learning_log(content: str) -> str:
+    """学んだことを学習記録として保存する。
+
+    学習内容を振り返りとして残したいときに使う。保存前に利用者の承認が必要。
+    """
+    if not content.strip():
+        return "学習記録が空のため保存しませんでした。"
+
+    LEARNING_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = LEARNING_LOG_DIR / f"{timestamp}-{uuid4().hex}.txt"
+    with path.open("x", encoding="utf-8") as f:
+        f.write(content)
+        f.write("\n")
+    return f"学習記録を保存しました: {path.name}"

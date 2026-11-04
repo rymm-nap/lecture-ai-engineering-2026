@@ -11,7 +11,7 @@ from pydantic_ai.models.test import TestModel
 
 from app.agent import agent
 
-BASE_TOOLS = {"search_glossary", "get_lecture_summary", "make_quiz"}
+BASE_TOOLS = {"search_glossary", "get_lecture_summary", "make_quiz", "save_learning_log"}
 
 
 def _parts(result, kind):
@@ -40,3 +40,28 @@ def test_glossary_result_reaches_the_model():
         result = agent.run_sync("RAGとは？")
     returns = _parts(result, ToolReturnPart)
     assert returns and returns[0].tool_name == "search_glossary"
+
+
+def test_learning_log_waits_for_approval_then_runs(tmp_path, monkeypatch):
+    from app import tools
+
+    monkeypatch.setattr(tools, "LEARNING_LOG_DIR", tmp_path)
+    model = TestModel(call_tools=["save_learning_log"])
+    with agent.override(model=model):
+        result = agent.run_sync("学んだ内容を記録して")
+
+    assert isinstance(result.output, DeferredToolRequests)
+    assert len(result.output.approvals) == 1
+    assert list(tmp_path.iterdir()) == []
+
+    deferred_results = result.output.build_results(
+        approvals={result.output.approvals[0].tool_call_id: True}
+    )
+    with agent.override(model=TestModel()):
+        resumed = agent.run_sync(
+            message_history=result.all_messages(),
+            deferred_tool_results=deferred_results,
+        )
+
+    assert not isinstance(resumed.output, DeferredToolRequests)
+    assert len(list(tmp_path.iterdir())) == 1
